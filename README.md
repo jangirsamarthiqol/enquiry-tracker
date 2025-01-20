@@ -1,6 +1,3 @@
-Here's a GitHub `README.md` file for your project:
-
-```markdown
 # Property Enquiry Tracking System
 
 A web application built with **Streamlit**, **Google Sheets**, and **Firebase Firestore** to manage and track property enquiries efficiently.
@@ -129,7 +126,7 @@ This project is licensed under the [MIT License](LICENSE).
 ## Contact
 
 For any questions or issues, please contact [your-email@example.com](mailto:your-email@example.com).
-```
+
 
 ### Customization
 Replace placeholders like `your-username`, `your-email@example.com`, and `LICENSE` details as per your project. Let me know if you want to add any specific details or sections!
