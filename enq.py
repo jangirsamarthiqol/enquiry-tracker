@@ -101,6 +101,14 @@ def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
             st.error("No property found for the given Property ID.")
             return None
 
+        # Convert Unix timestamp to date (if applicable)
+        unix_timestamp = property_details.get("dateOfStatusLastChecked")
+        if unix_timestamp:
+            # Convert to date format
+            date_of_status_last_checked = datetime.fromtimestamp(unix_timestamp).strftime('%Y-%m-%d')
+        else:
+            date_of_status_last_checked = "Unknown"
+
         # Fetch agent details
         cp_id = property_details.get("cpCode")
         agents_ref = db.collection("agents")
@@ -116,7 +124,7 @@ def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
             "sellerAgentName": agent_details.get("name", "Unknown") if agent_details else "Unknown",
             "cpId": cp_id if cp_id else "Unknown",
             "sellerAgentKAM": agent_details.get("kam", "Unknown") if agent_details else "Unknown",
-            "dateOfStatusLastChecked": property_details.get("dateOfStatusLastChecked", "Unknown"),
+            "dateOfStatusLastChecked": date_of_status_last_checked,
             "added": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             "lastModified": datetime.now().strftime('%Y-%m-%d'),
             "status": property_details.get("status", "Unknown")
@@ -129,7 +137,7 @@ def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
             "Property ID": property_id,
             "Seller Agent Name": enquiry_data["sellerAgentName"],
             "Seller Agent Number": enquiry_data["sellerAgentNumber"],
-       #      "Date of Status Last Checked": enquiry_data["dateOfStatusLastChecked"]
+            "Date of Status Last Checked": enquiry_data["dateOfStatusLastChecked"]
         }
 
     except Exception as e:
@@ -166,14 +174,14 @@ def main():
                     st.write(f"**Property ID:** `{details['Property ID']}`")
                     st.write(f"**Seller Agent Name:** {details['Seller Agent Name']}")
                     st.write(f"**Seller Agent Number:** {details['Seller Agent Number']}")
-              #       st.write(f"**Date of Status Last Checked:** {details['Date of Status Last Checked']}")
+                    st.write(f"**Date of Status Last Checked:** {details['Date of Status Last Checked']}")
 
                     # Prepare copyable details
                     copy_details = (
                         f"Property ID: {details['Property ID']}\n"
                         f"Seller Agent Name: {details['Seller Agent Name']}\n"
                         f"Seller Agent Number: {details['Seller Agent Number']}\n"
-                     #    f"Date of Status Last Checked: {details['Date of Status Last Checked']}"
+                        # f"Date of Status Last Checked: {details['Date of Status Last Checked']}"
                     )
 
                     # Display the copyable text area
