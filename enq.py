@@ -59,9 +59,7 @@ def init_google_sheets():
         # Initialize the sheet if empty
         if not sheet.get_all_records():
             sheet.append_row([
-                "Enquiry ID", "Buyer Agent Number", "Property ID", "Seller Agent Number",
-                "Seller Agent Name", "CP_ID", "Seller Agent KAM", "Date of Status Last Checked",
-                "Added", "Last Modified", "Status"
+                "Enquiry ID", "Added", "Buyer Agent Number", "CP_ID", "Buyer Agent Name", "Buyer Agent KAM", "Property ID", "Seller Agent Number", "Seller Agent Name", "Seller Agent KAM", "# Times Property ID Enquired", "Date of Status Last Checked for the Inventory Enquired", "Last Modified", "Status"
             ])
         return sheet
     except Exception as e:
@@ -73,14 +71,17 @@ def save_to_google_sheet(sheet, enquiry_data):
     try:
         sheet.append_row([
             enquiry_data.get("enquiryId", ""),
+            enquiry_data.get("added", ""),
             enquiry_data.get("buyerAgentNumber", ""),
+            enquiry_data.get("cpId", ""),
+            enquiry_data.get("buyerAgentName", ""),
+            enquiry_data.get("buyerAgentKAM", ""),
             enquiry_data.get("propertyId", ""),
             enquiry_data.get("sellerAgentNumber", ""),
             enquiry_data.get("sellerAgentName", ""),
-            enquiry_data.get("cpId", ""),
             enquiry_data.get("sellerAgentKAM", ""),
+            enquiry_data.get("timesEnquired", ""),
             enquiry_data.get("dateOfStatusLastChecked", ""),
-            enquiry_data.get("added", ""),
             enquiry_data.get("lastModified", ""),
             enquiry_data.get("status", "")
         ])
@@ -91,6 +92,10 @@ def save_to_google_sheet(sheet, enquiry_data):
 def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
     try:
         property_id = property_id.upper()
+
+        # Add +91 prefix to buyer agent number
+        if not buyer_agent_number.startswith("+91"):
+            buyer_agent_number = f"+91{buyer_agent_number}"
 
         # Fetch property details
         inventories_ref = db.collection("ACN123")
@@ -104,28 +109,34 @@ def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
         # Convert Unix timestamp to date (if applicable)
         unix_timestamp = property_details.get("dateOfStatusLastChecked")
         if unix_timestamp:
-            # Convert to date format
             date_of_status_last_checked = datetime.fromtimestamp(unix_timestamp).strftime('%Y-%m-%d')
         else:
             date_of_status_last_checked = "Unknown"
 
-        # Fetch agent details
+        # Fetch seller agent details
         cp_id = property_details.get("cpCode")
         agents_ref = db.collection("agents")
-        agent_query = agents_ref.where("cpId", "==", cp_id).stream()
-        agent_details = next((doc.to_dict() for doc in agent_query), None)
+        seller_query = agents_ref.where("cpId", "==", cp_id).stream()
+        seller_details = next((doc.to_dict() for doc in seller_query), None)
+
+        # Fetch buyer agent details
+        buyer_query = agents_ref.where("phonenumber", "==", buyer_agent_number).stream()
+        buyer_details = next((doc.to_dict() for doc in buyer_query), None)
 
         # Prepare enquiry data
         enquiry_data = {
             "enquiryId": f"EQA{datetime.now().strftime('%Y%m%d%H%M%S')}",
-            "buyerAgentNumber": buyer_agent_number if buyer_agent_number else "Unknown",
-            "propertyId": property_id,
-            "sellerAgentNumber": agent_details.get("phonenumber", "Unknown") if agent_details else "Unknown",
-            "sellerAgentName": agent_details.get("name", "Unknown") if agent_details else "Unknown",
-            "cpId": cp_id if cp_id else "Unknown",
-            "sellerAgentKAM": agent_details.get("kam", "Unknown") if agent_details else "Unknown",
-            "dateOfStatusLastChecked": date_of_status_last_checked,
             "added": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "buyerAgentNumber": buyer_agent_number,
+            "cpId": buyer_details.get("cpId", "Unknown") if buyer_details else "Unknown",
+            "buyerAgentName": buyer_details.get("name", "Unknown") if buyer_details else "Unknown",
+            "buyerAgentKAM": buyer_details.get("kam", "Unknown") if buyer_details else "Unknown",
+            "propertyId": property_id,
+            "sellerAgentNumber": seller_details.get("phonenumber", "Unknown") if seller_details else "Unknown",
+            "sellerAgentName": seller_details.get("name", "Unknown") if seller_details else "Unknown",
+            "sellerAgentKAM": seller_details.get("kam", "Unknown") if seller_details else "Unknown",
+            "timesEnquired": 1,  # Placeholder for times enquired (can be updated if tracking is implemented)
+            "dateOfStatusLastChecked": date_of_status_last_checked,
             "lastModified": datetime.now().strftime('%Y-%m-%d'),
             "status": property_details.get("status", "Unknown")
         }
@@ -133,12 +144,7 @@ def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
         # Save to Google Sheet
         save_to_google_sheet(sheet, enquiry_data)
 
-        return {
-            "Property ID": property_id,
-            "Seller Agent Name": enquiry_data["sellerAgentName"],
-            "Seller Agent Number": enquiry_data["sellerAgentNumber"],
-            "Date of Status Last Checked": enquiry_data["dateOfStatusLastChecked"]
-        }
+        return enquiry_data
 
     except Exception as e:
         st.error(f"Error fetching and saving data: {e}")
@@ -147,6 +153,7 @@ def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
 # Streamlit app
 def main():
     st.sidebar.title("Navigation")
+    st.sidebar.markdown("[Micromarket Finder](https://micromarket-finder.onrender.com/)")
     st.title("Property Enquiry System")
 
     # Initialize Firebase and Google Sheets
@@ -156,13 +163,13 @@ def main():
     # Form for input
     with st.form("enquiry_form"):
         property_id = st.text_input("Property ID", placeholder="Enter the Property ID")
-        buyer_agent_number = st.text_input("Buyer Agent Number (Optional)", placeholder="Enter the Buyer's Phone Number")
+        buyer_agent_number = st.text_input("Buyer Agent Number", placeholder="Enter the Buyer's Phone Number")
         submitted = st.form_submit_button("Submit")
 
     # Handle form submission
     if submitted:
-        if not property_id:
-            st.error("Please fill in the Property ID.")
+        if not property_id or not buyer_agent_number:
+            st.error("Please fill in all required fields.")
         else:
             with st.spinner("Fetching data..."):
                 details = fetch_data_and_save(db, sheet, property_id, buyer_agent_number)
@@ -171,17 +178,15 @@ def main():
 
                     # Enhanced display of fetched details
                     st.subheader("Fetched Details")
-                    st.write(f"**Property ID:** `{details['Property ID']}`")
-                    st.write(f"**Seller Agent Name:** {details['Seller Agent Name']}")
-                    st.write(f"**Seller Agent Number:** {details['Seller Agent Number']}")
-                    st.write(f"**Date of Status Last Checked:** {details['Date of Status Last Checked']}")
+                    st.write(f"**Property ID:** `{details['propertyId']}`")
+                    st.write(f"**Seller Agent Name:** {details['sellerAgentName']}")
+                    st.write(f"**Seller Agent Number:** {details['sellerAgentNumber']}")
 
                     # Prepare copyable details
                     copy_details = (
-                        f"Property ID: {details['Property ID']}\n"
-                        f"Seller Agent Name: {details['Seller Agent Name']}\n"
-                        f"Seller Agent Number: {details['Seller Agent Number']}\n"
-                        # f"Date of Status Last Checked: {details['Date of Status Last Checked']}"
+                        f"Property ID: {details['propertyId']}\n"
+                        f"Seller Agent Name: {details['sellerAgentName']}\n"
+                        f"Seller Agent Number: {details['sellerAgentNumber']}"
                     )
 
                     # Display the copyable text area
@@ -189,7 +194,7 @@ def main():
                     components.html(f"""
                         <textarea id="details" style="width: 100%; height: 100px;" readonly>{copy_details}</textarea>
                         <button onclick="navigator.clipboard.writeText(document.getElementById('details').value)"
-                                style="padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                style="padding: 10px; background-color:rgb(7, 58, 0); color: white; border: none; border-radius: 5px; cursor: pointer;">
                             Copy to Clipboard
                         </button>
                     """, height=150)
