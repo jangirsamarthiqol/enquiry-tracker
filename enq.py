@@ -129,7 +129,7 @@ def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
             "Property ID": property_id,
             "Seller Agent Name": enquiry_data["sellerAgentName"],
             "Seller Agent Number": enquiry_data["sellerAgentNumber"],
-            "Date of Status Last Checked": enquiry_data["dateOfStatusLastChecked"]
+       #      "Date of Status Last Checked": enquiry_data["dateOfStatusLastChecked"]
         }
 
     except Exception as e:
@@ -166,14 +166,14 @@ def main():
                     st.write(f"**Property ID:** `{details['Property ID']}`")
                     st.write(f"**Seller Agent Name:** {details['Seller Agent Name']}")
                     st.write(f"**Seller Agent Number:** {details['Seller Agent Number']}")
-                    st.write(f"**Date of Status Last Checked:** {details['Date of Status Last Checked']}")
+              #       st.write(f"**Date of Status Last Checked:** {details['Date of Status Last Checked']}")
 
                     # Prepare copyable details
                     copy_details = (
                         f"Property ID: {details['Property ID']}\n"
                         f"Seller Agent Name: {details['Seller Agent Name']}\n"
                         f"Seller Agent Number: {details['Seller Agent Number']}\n"
-                        f"Date of Status Last Checked: {details['Date of Status Last Checked']}"
+                     #    f"Date of Status Last Checked: {details['Date of Status Last Checked']}"
                     )
 
                     # Display the copyable text area
