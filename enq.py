@@ -181,6 +181,7 @@ def main():
                     st.write(f"**Property ID:** `{details['propertyId']}`")
                     st.write(f"**Seller Agent Name:** {details['sellerAgentName']}")
                     st.write(f"**Seller Agent Number:** {details['sellerAgentNumber']}")
+                    st.write(f"**Date of Status Last Checked:** {details['dateOfStatusLastChecked']}")
 
                     # Prepare copyable details
                     copy_details = (
