@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Initialize Firebase
+@st.cache_resource
 def init_firebase():
     try:
         if not firebase_admin._apps:
@@ -24,10 +25,8 @@ def init_firebase():
                 "client_id": os.getenv("FIREBASE_CLIENT_ID"),
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
-                "auth_provider_x509_cert_url": "https://www.googleapis.com/v1/certs",
-                "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_EMAIL").replace(
-                    "firebase-adminsdk", "metadata/x509/firebase-adminsdk"
-                )
+                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_X509_CERT_URL")
             })
             firebase_admin.initialize_app(firebase_cred)
         return firestore.client()
@@ -36,6 +35,7 @@ def init_firebase():
         st.stop()
 
 # Initialize Google Sheets
+@st.cache_resource
 def init_google_sheets():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -48,10 +48,8 @@ def init_google_sheets():
             "client_id": os.getenv("GSPREAD_CLIENT_ID"),
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/v1/certs",
-            "client_x509_cert_url": os.getenv("GSPREAD_CLIENT_EMAIL").replace(
-                "samarth-s-api", "metadata/x509/samarth-s-api"
-            ),
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": os.getenv("GSPREAD_CLIENT_X509_CERT_URL")
         }
         client = gspread.service_account_from_dict(google_creds)
         sheet = client.open_by_key(os.getenv("GSPREAD_SHEET_ID")).sheet1
@@ -66,30 +64,32 @@ def init_google_sheets():
         st.error(f"Error initializing Google Sheets: {e}")
         st.stop()
 
-# Save data to Google Sheet
-def save_to_google_sheet(sheet, enquiry_data):
+# Save data to Google Sheet (Batch Processing)
+def batch_save_to_google_sheet(sheet, data_list):
     try:
-        sheet.append_row([
-            enquiry_data.get("enquiryId", ""),
-            enquiry_data.get("added", ""),
-            enquiry_data.get("buyerAgentNumber", ""),
-            enquiry_data.get("cpId", ""),
-            enquiry_data.get("buyerAgentName", ""),
-            enquiry_data.get("buyerAgentKAM", ""),
-            enquiry_data.get("propertyId", ""),
-            enquiry_data.get("sellerAgentNumber", ""),
-            enquiry_data.get("sellerAgentName", ""),
-            enquiry_data.get("sellerAgentKAM", ""),
-            enquiry_data.get("timesEnquired", ""),
-            enquiry_data.get("dateOfStatusLastChecked", ""),
-            enquiry_data.get("lastModified", ""),
-            enquiry_data.get("status", "")
-        ])
+        for data in data_list:
+            sheet.append_row([
+                data.get("enquiryId", ""),
+                data.get("added", ""),
+                data.get("buyerAgentNumber", ""),
+                data.get("cpId", ""),
+                data.get("buyerAgentName", ""),
+                data.get("buyerAgentKAM", ""),
+                data.get("propertyId", ""),
+                data.get("sellerAgentNumber", ""),
+                data.get("sellerAgentName", ""),
+                data.get("sellerAgentKAM", ""),
+                data.get("timesEnquired", ""),
+                data.get("dateOfStatusLastChecked", ""),
+                data.get("lastModified", ""),
+                data.get("status", "")
+            ])
     except Exception as e:
         st.error(f"Error saving to Google Sheet: {e}")
 
 # Fetch data from Firebase and save to Google Sheets
-def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
+@st.cache_data(ttl=600)
+def fetch_data_and_save(_db, property_id, buyer_agent_number):
     try:
         property_id = property_id.upper()
 
@@ -98,7 +98,7 @@ def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
             buyer_agent_number = f"+91{buyer_agent_number}"
 
         # Fetch property details
-        inventories_ref = db.collection("ACN123")
+        inventories_ref = _db.collection("ACN123")
         inventory_query = inventories_ref.where("propertyId", "==", property_id).stream()
         property_details = next((doc.to_dict() for doc in inventory_query), None)
 
@@ -115,7 +115,7 @@ def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
 
         # Fetch seller agent details
         cp_id = property_details.get("cpCode")
-        agents_ref = db.collection("agents")
+        agents_ref = _db.collection("agents")
         seller_query = agents_ref.where("cpId", "==", cp_id).stream()
         seller_details = next((doc.to_dict() for doc in seller_query), None)
 
@@ -140,9 +140,6 @@ def fetch_data_and_save(db, sheet, property_id, buyer_agent_number):
             "lastModified": datetime.now().strftime('%Y-%m-%d'),
             "status": property_details.get("status", "Unknown")
         }
-
-        # Save to Google Sheet
-        save_to_google_sheet(sheet, enquiry_data)
 
         return enquiry_data
 
@@ -172,22 +169,25 @@ def main():
             st.error("Please fill in all required fields.")
         else:
             with st.spinner("Fetching data..."):
-                details = fetch_data_and_save(db, sheet, property_id, buyer_agent_number)
-                if details:
+                enquiry_data = fetch_data_and_save(db, property_id, buyer_agent_number)
+                if enquiry_data:
+                    # Save to Google Sheet in batch (add single entry to batch for now)
+                    batch_save_to_google_sheet(sheet, [enquiry_data])
+
                     st.success("Enquiry data saved successfully!")
 
                     # Enhanced display of fetched details
                     st.subheader("Fetched Details")
-                    st.write(f"**Property ID:** `{details['propertyId']}`")
-                    st.write(f"**Seller Agent Name:** {details['sellerAgentName']}")
-                    st.write(f"**Seller Agent Number:** {details['sellerAgentNumber']}")
-                    st.write(f"**Date of Status Last Checked:** {details['dateOfStatusLastChecked']}")
+                    st.write(f"**Property ID:** `{enquiry_data['propertyId']}`")
+                    st.write(f"**Seller Agent Name:** {enquiry_data['sellerAgentName']}")
+                    st.write(f"**Seller Agent Number:** {enquiry_data['sellerAgentNumber']}")
+                    st.write(f"**Date of Status Last Checked:** {enquiry_data['dateOfStatusLastChecked']}")
 
                     # Prepare copyable details
                     copy_details = (
-                        f"Property ID: {details['propertyId']}\n"
-                        f"Seller Agent Name: {details['sellerAgentName']}\n"
-                        f"Seller Agent Number: {details['sellerAgentNumber']}"
+                        f"Property ID: {enquiry_data['propertyId']}\n"
+                        f"Seller Agent Name: {enquiry_data['sellerAgentName']}\n"
+                        f"Seller Agent Number: {enquiry_data['sellerAgentNumber']}"
                     )
 
                     # Display the copyable text area
@@ -199,6 +199,13 @@ def main():
                             Copy to Clipboard
                         </button>
                     """, height=150)
+
+    # Add View Enquiry Sheet Button
+    st.markdown("### View Enquiry Sheet")
+    st.markdown(
+        "[Open Google Sheet](https://docs.google.com/spreadsheets/d/1mt-Uj3CvVgLsEBibwv34wwhbcoMjI0Co_ReownIYjSA/edit?gid=0) ",
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()
