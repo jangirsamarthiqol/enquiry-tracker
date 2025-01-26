@@ -1,4 +1,5 @@
 import os
+import re
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -64,6 +65,25 @@ def init_google_sheets():
         st.error(f"Error initializing Google Sheets: {e}")
         st.stop()
 
+# Normalize mobile number
+def normalize_mobile_number(number):
+    """
+    Normalize a mobile number by ensuring it starts with '+91' and removing unwanted characters.
+    """
+    # Remove non-numeric characters except '+'
+    cleaned_number = re.sub(r"[^\d+]", "", number)
+    
+    # Ensure the number starts with '+91'
+    if not cleaned_number.startswith("+91"):
+        if cleaned_number.startswith("91"):
+            cleaned_number = f"+{cleaned_number}"
+        elif len(cleaned_number) == 10:  # Case: 10-digit mobile number
+            cleaned_number = f"+91{cleaned_number}"
+        else:
+            raise ValueError("Invalid mobile number format")
+    
+    return cleaned_number
+
 # Save data to Google Sheet (Batch Processing)
 def batch_save_to_google_sheet(sheet, data_list):
     try:
@@ -93,9 +113,12 @@ def fetch_data_and_save(_db, property_id, buyer_agent_number):
     try:
         property_id = property_id.upper()
 
-        # Add +91 prefix to buyer agent number
-        if not buyer_agent_number.startswith("+91"):
-            buyer_agent_number = f"+91{buyer_agent_number}"
+        # Normalize the buyer agent number
+        try:
+            buyer_agent_number = normalize_mobile_number(buyer_agent_number)
+        except ValueError as e:
+            st.error(f"Invalid Buyer Agent Number: {e}")
+            return None
 
         # Fetch property details
         inventories_ref = _db.collection("ACN123")
@@ -135,7 +158,7 @@ def fetch_data_and_save(_db, property_id, buyer_agent_number):
             "sellerAgentNumber": seller_details.get("phonenumber", "Unknown") if seller_details else "Unknown",
             "sellerAgentName": seller_details.get("name", "Unknown") if seller_details else "Unknown",
             "sellerAgentKAM": seller_details.get("kam", "Unknown") if seller_details else "Unknown",
-            "timesEnquired": 1,  # Placeholder for times enquired (can be updated if tracking is implemented)
+            "timesEnquired": 1,
             "dateOfStatusLastChecked": date_of_status_last_checked,
             "lastModified": datetime.now().strftime('%Y-%m-%d'),
             "status": property_details.get("status", "Unknown")
