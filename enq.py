@@ -58,7 +58,10 @@ def init_google_sheets():
         # Initialize the sheet if empty
         if not sheet.get_all_records():
             sheet.append_row([
-                "Enquiry ID", "Added", "Buyer Agent Number", "CP_ID", "Buyer Agent Name", "Buyer Agent KAM", "Property ID", "Seller Agent Number", "Seller Agent Name", "Seller Agent KAM", "# Times Property ID Enquired", "Date of Status Last Checked for the Inventory Enquired", "Last Modified", "Status"
+                "Enquiry ID", "Added", "Buyer Agent Number", "CP_ID", "Buyer Agent Name", "Buyer Agent KAM",
+                "Property ID", "Property Name", "Seller Agent Number", "Seller Agent Name", "Seller Agent KAM",
+                "# Times Property ID Enquired", "Date of Status Last Checked for the Inventory Enquired", 
+                "Last Modified", "Status"
             ])
         return sheet
     except Exception as e:
@@ -70,10 +73,7 @@ def normalize_mobile_number(number):
     """
     Normalize a mobile number by ensuring it starts with '+91' and removing unwanted characters.
     """
-    # Remove non-numeric characters except '+'
-    cleaned_number = re.sub(r"[^\d+]", "", number)
-    
-    # Ensure the number starts with '+91'
+    cleaned_number = re.sub(r"[^\d+]", "", number)  # Remove non-numeric characters except '+'
     if not cleaned_number.startswith("+91"):
         if cleaned_number.startswith("91"):
             cleaned_number = f"+{cleaned_number}"
@@ -81,7 +81,6 @@ def normalize_mobile_number(number):
             cleaned_number = f"+91{cleaned_number}"
         else:
             raise ValueError("Invalid mobile number format")
-    
     return cleaned_number
 
 # Save data to Google Sheet (Batch Processing)
@@ -96,6 +95,7 @@ def batch_save_to_google_sheet(sheet, data_list):
                 data.get("buyerAgentName", ""),
                 data.get("buyerAgentKAM", ""),
                 data.get("propertyId", ""),
+                data.get("nameOfTheProperty", ""),
                 data.get("sellerAgentNumber", ""),
                 data.get("sellerAgentName", ""),
                 data.get("sellerAgentKAM", ""),
@@ -129,12 +129,10 @@ def fetch_data_and_save(_db, property_id, buyer_agent_number):
             st.error("No property found for the given Property ID.")
             return None
 
-        # Convert Unix timestamp to date (if applicable)
+        # Extract details
+        property_name = property_details.get("nameOfTheProperty", "Unknown")
         unix_timestamp = property_details.get("dateOfStatusLastChecked")
-        if unix_timestamp:
-            date_of_status_last_checked = datetime.fromtimestamp(unix_timestamp).strftime('%Y-%m-%d')
-        else:
-            date_of_status_last_checked = "Unknown"
+        date_of_status_last_checked = datetime.fromtimestamp(unix_timestamp).strftime('%Y-%m-%d') if unix_timestamp else "Unknown"
 
         # Fetch seller agent details
         cp_id = property_details.get("cpCode")
@@ -146,15 +144,22 @@ def fetch_data_and_save(_db, property_id, buyer_agent_number):
         buyer_query = agents_ref.where("phonenumber", "==", buyer_agent_number).stream()
         buyer_details = next((doc.to_dict() for doc in buyer_query), None)
 
+        # Generate next enquiry ID
+        last_enquiry_id = "EQB1437"  # Replace with dynamic fetching logic if needed
+        prefix = last_enquiry_id[:3]
+        numeric_part = int(last_enquiry_id[3:]) + 1
+        new_enquiry_id = f"{prefix}{numeric_part:04}"
+
         # Prepare enquiry data
         enquiry_data = {
-            "enquiryId": f"EQA{datetime.now().strftime('%Y%m%d%H%M%S')}",
-            "added": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "enquiryId": new_enquiry_id,
+            "added": datetime.now().strftime('%d/%b/%Y'),  # Format: 26/Jan/2025
             "buyerAgentNumber": buyer_agent_number,
             "cpId": buyer_details.get("cpId", "Unknown") if buyer_details else "Unknown",
             "buyerAgentName": buyer_details.get("name", "Unknown") if buyer_details else "Unknown",
             "buyerAgentKAM": buyer_details.get("kam", "Unknown") if buyer_details else "Unknown",
             "propertyId": property_id,
+            "propertyName": property_name,
             "sellerAgentNumber": seller_details.get("phonenumber", "Unknown") if seller_details else "Unknown",
             "sellerAgentName": seller_details.get("name", "Unknown") if seller_details else "Unknown",
             "sellerAgentKAM": seller_details.get("kam", "Unknown") if seller_details else "Unknown",
@@ -194,26 +199,27 @@ def main():
             with st.spinner("Fetching data..."):
                 enquiry_data = fetch_data_and_save(db, property_id, buyer_agent_number)
                 if enquiry_data:
-                    # Save to Google Sheet in batch (add single entry to batch for now)
+                    # Save to Google Sheet in batch
                     batch_save_to_google_sheet(sheet, [enquiry_data])
 
                     st.success("Enquiry data saved successfully!")
 
-                    # Enhanced display of fetched details
+                    # Display fetched details
                     st.subheader("Fetched Details")
                     st.write(f"**Property ID:** `{enquiry_data['propertyId']}`")
+                    st.write(f"**Property Name:** `{enquiry_data['propertyName']}`")
                     st.write(f"**Seller Agent Name:** {enquiry_data['sellerAgentName']}")
                     st.write(f"**Seller Agent Number:** {enquiry_data['sellerAgentNumber']}")
                     st.write(f"**Date of Status Last Checked:** {enquiry_data['dateOfStatusLastChecked']}")
 
-                    # Prepare copyable details
+                    # Copyable details
                     copy_details = (
                         f"Property ID: {enquiry_data['propertyId']}\n"
+                        f"Property Name: {enquiry_data['propertyName']}\n"
                         f"Seller Agent Name: {enquiry_data['sellerAgentName']}\n"
                         f"Seller Agent Number: {enquiry_data['sellerAgentNumber']}"
                     )
 
-                    # Display the copyable text area
                     st.subheader("Copy Details to Clipboard")
                     components.html(f"""
                         <textarea id="details" style="width: 100%; height: 100px;" readonly>{copy_details}</textarea>
@@ -223,7 +229,6 @@ def main():
                         </button>
                     """, height=150)
 
-    # Add View Enquiry Sheet Button
     st.markdown("### View Enquiry Sheet")
     st.markdown(
         "[Open Google Sheet](https://docs.google.com/spreadsheets/d/1mt-Uj3CvVgLsEBibwv34wwhbcoMjI0Co_ReownIYjSA/edit?gid=0) ",
