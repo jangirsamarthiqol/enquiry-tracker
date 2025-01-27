@@ -26,7 +26,7 @@ def init_firebase():
                 "client_id": os.getenv("FIREBASE_CLIENT_ID"),
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
-                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                "auth_provider_x509_cert_url": "https://www.googleapis.com/v1/certs",
                 "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_X509_CERT_URL")
             })
             firebase_admin.initialize_app(firebase_cred)
@@ -49,7 +49,7 @@ def init_google_sheets():
             "client_id": os.getenv("GSPREAD_CLIENT_ID"),
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/v1/certs",
             "client_x509_cert_url": os.getenv("GSPREAD_CLIENT_X509_CERT_URL")
         }
         client = gspread.service_account_from_dict(google_creds)
@@ -95,7 +95,7 @@ def batch_save_to_google_sheet(sheet, data_list):
                 data.get("buyerAgentName", ""),
                 data.get("buyerAgentKAM", ""),
                 data.get("propertyId", ""),
-                data.get("nameOfTheProperty", ""),
+                data.get("propertyName", ""),  # Correct key for property name
                 data.get("sellerAgentNumber", ""),
                 data.get("sellerAgentName", ""),
                 data.get("sellerAgentKAM", ""),
@@ -107,9 +107,21 @@ def batch_save_to_google_sheet(sheet, data_list):
     except Exception as e:
         st.error(f"Error saving to Google Sheet: {e}")
 
+# Fetch the last enquiry ID dynamically from Google Sheets
+def get_last_enquiry_id(sheet):
+    try:
+        records = sheet.get_all_records()
+        if not records:
+            return "EQB1437"  # Default starting ID
+        last_row = records[-1]
+        return last_row.get("Enquiry ID", "EQB1437")
+    except Exception as e:
+        st.error(f"Error fetching the last enquiry ID: {e}")
+        return "EQB1437"  # Fallback in case of error
+
 # Fetch data from Firebase and save to Google Sheets
 @st.cache_data(ttl=600)
-def fetch_data_and_save(_db, property_id, buyer_agent_number):
+def fetch_data_and_save(_db, property_id, buyer_agent_number, last_enquiry_id):
     try:
         property_id = property_id.upper()
 
@@ -130,7 +142,7 @@ def fetch_data_and_save(_db, property_id, buyer_agent_number):
             return None
 
         # Extract details
-        property_name = property_details.get("nameOfTheProperty", "Unknown")
+        property_name = property_details.get("nameOfTheProperty", "Unknown")  # Use correct key for property name
         unix_timestamp = property_details.get("dateOfStatusLastChecked")
         date_of_status_last_checked = datetime.fromtimestamp(unix_timestamp).strftime('%Y-%m-%d') if unix_timestamp else "Unknown"
 
@@ -145,7 +157,6 @@ def fetch_data_and_save(_db, property_id, buyer_agent_number):
         buyer_details = next((doc.to_dict() for doc in buyer_query), None)
 
         # Generate next enquiry ID
-        last_enquiry_id = "EQB1437"  # Replace with dynamic fetching logic if needed
         prefix = last_enquiry_id[:3]
         numeric_part = int(last_enquiry_id[3:]) + 1
         new_enquiry_id = f"{prefix}{numeric_part:04}"
@@ -185,6 +196,9 @@ def main():
     db = init_firebase()
     sheet = init_google_sheets()
 
+    # Get the last enquiry ID
+    last_enquiry_id = get_last_enquiry_id(sheet)
+
     # Form for input
     with st.form("enquiry_form"):
         property_id = st.text_input("Property ID", placeholder="Enter the Property ID")
@@ -197,7 +211,7 @@ def main():
             st.error("Please fill in all required fields.")
         else:
             with st.spinner("Fetching data..."):
-                enquiry_data = fetch_data_and_save(db, property_id, buyer_agent_number)
+                enquiry_data = fetch_data_and_save(db, property_id, buyer_agent_number, last_enquiry_id)
                 if enquiry_data:
                     # Save to Google Sheet in batch
                     batch_save_to_google_sheet(sheet, [enquiry_data])
