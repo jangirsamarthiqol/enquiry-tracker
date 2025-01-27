@@ -86,7 +86,15 @@ def normalize_mobile_number(number):
 # Save data to Google Sheet (Batch Processing)
 def batch_save_to_google_sheet(sheet, data_list):
     try:
+        # Fetch existing data to calculate times property enquired
+        records = sheet.get_all_records()
+
         for data in data_list:
+            property_id = data.get("propertyId", "")
+            # Calculate times property ID enquired
+            times_enquired = sum(1 for record in records if record["Property ID"] == property_id) + 1
+
+            # Append the row with updated data
             sheet.append_row([
                 data.get("enquiryId", ""),
                 data.get("added", ""),
@@ -95,11 +103,11 @@ def batch_save_to_google_sheet(sheet, data_list):
                 data.get("buyerAgentName", ""),
                 data.get("buyerAgentKAM", ""),
                 data.get("propertyId", ""),
-                data.get("propertyName", ""),  # Correct key for property name
+                data.get("propertyName", ""),
                 data.get("sellerAgentNumber", ""),
                 data.get("sellerAgentName", ""),
                 data.get("sellerAgentKAM", ""),
-                data.get("timesEnquired", ""),
+                times_enquired,  # Dynamically calculated
                 data.get("dateOfStatusLastChecked", ""),
                 data.get("lastModified", ""),
                 data.get("status", "")
@@ -174,7 +182,7 @@ def fetch_data_and_save(_db, property_id, buyer_agent_number, last_enquiry_id):
             "sellerAgentNumber": seller_details.get("phonenumber", "Unknown") if seller_details else "Unknown",
             "sellerAgentName": seller_details.get("name", "Unknown") if seller_details else "Unknown",
             "sellerAgentKAM": seller_details.get("kam", "Unknown") if seller_details else "Unknown",
-            "timesEnquired": 1,
+            "timesEnquired": 1,  # Initial value; calculated dynamically in batch_save_to_google_sheet
             "dateOfStatusLastChecked": date_of_status_last_checked,
             "lastModified": datetime.now().strftime('%Y-%m-%d'),
             "status": property_details.get("status", "Unknown")
