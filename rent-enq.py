@@ -56,9 +56,20 @@ def init_google_sheets():
             st.error("❌ Google Sheet ID is missing! Check your .env file.")
             return None
         sheet = client.open_by_key(sheet_id).sheet1
+        # Updated expected headers with additional columns
         expected_headers = [
-            "Enquiry ID", "Added", "Buyer Agent Number", "Buyer Agent Name",
-            "Property ID", "Property Name", "Seller Agent Name", "Seller Agent Number",
+            "Enquiry ID",
+            "Added",
+            "Buyer Agent Number",
+            "Buyer Agent Name",
+            "Property ID",
+            "Property Name",
+            "Property Type",
+            "Rent Per Month in Lakhs",
+            "Configuration",
+            "Micromarket",
+            "Seller Agent Name",
+            "Seller Agent Number",
             "Date of Status Last Checked"
         ]
         existing_headers = sheet.row_values(1)
@@ -123,6 +134,7 @@ def fetch_rental_data(_db, property_id, buyer_agent_number, last_enquiry_id):
         prefix = last_enquiry_id[:4]
         numeric_part = int(last_enquiry_id[4:]) + 1
         new_enquiry_id = f"{prefix}{numeric_part:04}"
+        # New rental_data dictionary with keys ordered to match the sheet columns
         rental_data = {
             "Enquiry ID": new_enquiry_id,
             "Added": datetime.now().strftime('%d/%b/%Y'),
@@ -130,9 +142,13 @@ def fetch_rental_data(_db, property_id, buyer_agent_number, last_enquiry_id):
             "Buyer Agent Name": buyer_agent_name,
             "Property ID": rental_details.get("propertyId", "Unknown"),
             "Property Name": rental_details.get("propertyName", "Unknown"),
+            "Property Type": rental_details.get("propertyType", "Unknown"),
+            "Rent Per Month in Lakhs": rental_details.get("rentPerMonthInLakhs", "Unknown"),
+            "Configuration": rental_details.get("configuration", "Unknown"),
+            "Micromarket": rental_details.get("micromarket", "Unknown"),
             "Seller Agent Name": seller_agent_name,
             "Seller Agent Number": seller_agent_number,
-            "Date of Status Last Checked": format_timestamp(rental_details.get("dateOfStatusLastChecked")),
+            "Date of Status Last Checked": format_timestamp(rental_details.get("dateOfStatusLastChecked"))
         }
         return rental_data
     except Exception as e:
@@ -155,6 +171,7 @@ def save_enquiry_to_google_sheet(sheet_id, data):
         }
         client = gspread.service_account_from_dict(google_creds)
         sheet = client.open_by_key(sheet_id).sheet1
+        # Append row using the values in the order of the expected headers
         sheet.append_row(list(data.values()))
         st.success("✅ Enquiry saved successfully!")
     except Exception as e:
@@ -182,8 +199,14 @@ def main():
                     st.subheader(f"🏠 {rental_data['Property Name']} ({rental_data['Property ID']})")
                     st.write(f"**Seller Agent:** {rental_data['Seller Agent Name']} ({rental_data['Seller Agent Number']})")
                     st.write(f"**Date of Status Last Checked:** {rental_data['Date of Status Last Checked']}")
+                    
+                    # Updated copy text with additional fields
                     copy_text = (
                         f"🏠 Property: {rental_data['Property Name']} ({rental_data['Property ID']})\n"
+                        f"🏢 Property Type: {rental_data.get('Property Type', 'Unknown')}\n"
+                        f"💰 Rent Per Month in Lakhs: {rental_data.get('Rent Per Month in Lakhs', 'Unknown')}\n"
+                        f"🏘 Configuration: {rental_data.get('Configuration', 'Unknown')}\n"
+                        f"📍 Micromarket: {rental_data.get('Micromarket', 'Unknown')}\n"
                         f"📞 Seller Agent: {rental_data['Seller Agent Name']} ({rental_data['Seller Agent Number']})\n"
                         f"🗓 Last Checked: {rental_data['Date of Status Last Checked']}"
                     )
