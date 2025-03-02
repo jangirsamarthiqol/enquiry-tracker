@@ -7,6 +7,25 @@ import gspread
 from datetime import datetime
 import streamlit.components.v1 as components
 
+st.set_page_config(
+    page_title="Rental Inventory",  
+    page_icon="./logo.jpg"  # Use relative path without the leading slash
+)
+
+# Force favicon update using HTML
+favicon_url = "./logo.jpg"  # Ensure the file exists in your project folder
+
+st.markdown(
+    f"""
+    <link rel="icon" type="image/jpeg" href="{favicon_url}">
+    """,
+    unsafe_allow_html=True
+)
+
+
+
+
+
 from dotenv import load_dotenv
 load_dotenv()
 
