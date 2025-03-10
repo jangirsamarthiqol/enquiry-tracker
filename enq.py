@@ -72,16 +72,19 @@ def init_google_sheets():
 def normalize_mobile_number(number):
     """
     Normalize a mobile number by ensuring it starts with '+91' and removing unwanted characters.
+    If exactly 10 digits are present (even if they start with 91), the number is prefixed with +91.
     """
-    cleaned_number = re.sub(r"[^\d+]", "", number)  # Remove non-numeric characters except '+'
-    if not cleaned_number.startswith("+91"):
-        if cleaned_number.startswith("91"):
-            cleaned_number = f"+{cleaned_number}"
-        elif len(cleaned_number) == 10:  # Case: 10-digit mobile number
-            cleaned_number = f"+91{cleaned_number}"
-        else:
-            raise ValueError("Invalid mobile number format")
-    return cleaned_number
+    # Remove all non-digit characters
+    cleaned_number = re.sub(r"[^\d]", "", number)
+    
+    # If the cleaned number has exactly 10 digits, add the +91 prefix
+    if len(cleaned_number) == 10:
+        return f"+91{cleaned_number}"
+    # If it already starts with 91 and has 12 digits, just add '+' in front
+    elif len(cleaned_number) == 12 and cleaned_number.startswith("91"):
+        return f"+{cleaned_number}"
+    else:
+        raise ValueError("Invalid mobile number format")
 
 # Save data to Google Sheet (Batch Processing)
 def batch_save_to_google_sheet(sheet, data_list):
@@ -163,6 +166,11 @@ def fetch_data_and_save(_db, property_id, buyer_agent_number, last_enquiry_id):
         # Fetch buyer agent details
         buyer_query = agents_ref.where("phonenumber", "==", buyer_agent_number).stream()
         buyer_details = next((doc.to_dict() for doc in buyer_query), None)
+        
+        # Prevent enquiry if buyer agent details are not found
+        if not buyer_details:
+            st.error("Buyer Agent details not found. Enquiry cannot proceed.")
+            return None
 
         # Generate next enquiry ID
         prefix = last_enquiry_id[:3]
@@ -174,9 +182,9 @@ def fetch_data_and_save(_db, property_id, buyer_agent_number, last_enquiry_id):
             "enquiryId": new_enquiry_id,
             "added": datetime.now().strftime('%d/%b/%Y'),  # Format: 26/Jan/2025
             "buyerAgentNumber": buyer_agent_number,
-            "cpId": buyer_details.get("cpId", "Unknown") if buyer_details else "Unknown",
-            "buyerAgentName": buyer_details.get("name", "Unknown") if buyer_details else "Unknown",
-            "buyerAgentKAM": buyer_details.get("kam", "Unknown") if buyer_details else "Unknown",
+            "cpId": buyer_details.get("cpId", "Unknown"),
+            "buyerAgentName": buyer_details.get("name", "Unknown"),
+            "buyerAgentKAM": buyer_details.get("kam", "Unknown"),
             "propertyId": property_id,
             "propertyName": property_name,
             "sellerAgentNumber": seller_details.get("phonenumber", "Unknown") if seller_details else "Unknown",
