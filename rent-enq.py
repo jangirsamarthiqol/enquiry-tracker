@@ -14,17 +14,12 @@ st.set_page_config(
 
 # Force favicon update using HTML
 favicon_url = "./logo.jpg"  # Ensure the file exists in your project folder
-
 st.markdown(
     f"""
     <link rel="icon" type="image/jpeg" href="{favicon_url}">
     """,
     unsafe_allow_html=True
 )
-
-
-
-
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -75,11 +70,12 @@ def init_google_sheets():
             st.error("❌ Google Sheet ID is missing! Check your .env file.")
             return None
         sheet = client.open_by_key(sheet_id).sheet1
-        # Updated expected headers with additional columns
+        # Updated expected headers with additional CPID columns
         expected_headers = [
             "Enquiry ID",
             "Added",
             "Buyer Agent Number",
+            "Buyer Agent CPID",
             "Buyer Agent Name",
             "Property ID",
             "Property Name",
@@ -89,6 +85,7 @@ def init_google_sheets():
             "Micromarket",
             "Seller Agent Name",
             "Seller Agent Number",
+            "Seller Agent CPID",
             "Date of Status Last Checked"
         ]
         existing_headers = sheet.row_values(1)
@@ -138,26 +135,40 @@ def fetch_rental_data(_db, property_id, buyer_agent_number, last_enquiry_id):
                 buyer_agent_number = f"+91{buyer_agent_number}"
             else:
                 raise ValueError("Invalid mobile number format")
+        
         rentals_ref = _db.collection("rental-inventories")
         rental_query = rentals_ref.where("propertyId", "==", property_id).stream()
         rental_details = next((doc.to_dict() for doc in rental_query), None)
         if not rental_details:
             st.error("❌ No rental property found for the given Property ID.")
             return None
+
+        # Get seller agent basic details from rental document
         seller_agent_number = rental_details.get("agentNumber", "Unknown")
         seller_agent_name = rental_details.get("agentName", "Unknown")
+        
         agents_ref = _db.collection("agents")
+        # Query buyer agent details by phone number
         buyer_query = agents_ref.where("phonenumber", "==", buyer_agent_number).stream()
         buyer_details = next((doc.to_dict() for doc in buyer_query), None)
         buyer_agent_name = buyer_details.get("name", "Unknown") if buyer_details else "Unknown"
+        buyer_agent_cpid = buyer_details.get("cpId", "Unknown") if buyer_details else "Unknown"
+        
+        # Query seller agent details by phone number
+        seller_query = agents_ref.where("phonenumber", "==", seller_agent_number).stream()
+        seller_details = next((doc.to_dict() for doc in seller_query), None)
+        seller_agent_cpid = seller_details.get("cpId", "Unknown") if seller_details else "Unknown"
+
         prefix = last_enquiry_id[:4]
         numeric_part = int(last_enquiry_id[4:]) + 1
         new_enquiry_id = f"{prefix}{numeric_part:04}"
-        # New rental_data dictionary with keys ordered to match the sheet columns
+        
+        # Rental data dictionary ordered to match the sheet columns
         rental_data = {
             "Enquiry ID": new_enquiry_id,
             "Added": datetime.now().strftime('%d/%b/%Y'),
             "Buyer Agent Number": buyer_agent_number,
+            "Buyer Agent CPID": buyer_agent_cpid,
             "Buyer Agent Name": buyer_agent_name,
             "Property ID": rental_details.get("propertyId", "Unknown"),
             "Property Name": rental_details.get("propertyName", "Unknown"),
@@ -167,6 +178,7 @@ def fetch_rental_data(_db, property_id, buyer_agent_number, last_enquiry_id):
             "Micromarket": rental_details.get("micromarket", "Unknown"),
             "Seller Agent Name": seller_agent_name,
             "Seller Agent Number": seller_agent_number,
+            "Seller Agent CPID": seller_agent_cpid,
             "Date of Status Last Checked": format_timestamp(rental_details.get("dateOfStatusLastChecked"))
         }
         return rental_data
@@ -227,6 +239,8 @@ def main():
                         f"🏘 Configuration: {rental_data.get('Configuration', 'Unknown')}\n"
                         f"📍 Micromarket: {rental_data.get('Micromarket', 'Unknown')}\n"
                         f"📞 Seller Agent: {rental_data['Seller Agent Name']} ({rental_data['Seller Agent Number']})\n"
+                        # f"🆔 Seller Agent CPID: {rental_data['Seller Agent CPID']}\n"
+                        # f"🆔 Buyer Agent CPID: {rental_data['Buyer Agent CPID']}\n"
                         f"🗓 Last Checked: {rental_data['Date of Status Last Checked']}"
                     )
                     st.subheader("📋 Copy Details to Clipboard")
