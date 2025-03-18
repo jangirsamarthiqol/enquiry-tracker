@@ -127,12 +127,24 @@ def get_last_enquiry_id(sheet_id):
 def fetch_rental_data(_db, property_id, buyer_agent_number, last_enquiry_id):
     try:
         property_id = property_id.upper()
+        
+        # Clean and format the buyer agent's phone number
         buyer_agent_number = re.sub(r"[^\d+]", "", buyer_agent_number)
-        if not buyer_agent_number.startswith("+91"):
-            if buyer_agent_number.startswith("91"):
-                buyer_agent_number = f"+{buyer_agent_number}"
-            elif len(buyer_agent_number) == 10:
-                buyer_agent_number = f"+91{buyer_agent_number}"
+        if buyer_agent_number.startswith("+"):
+            if not buyer_agent_number.startswith("+91"):
+                # Remove the + and reformat accordingly
+                buyer_agent_number = buyer_agent_number.lstrip("+")
+                if buyer_agent_number.startswith("91") and len(buyer_agent_number) == 12:
+                    buyer_agent_number = "+" + buyer_agent_number
+                elif len(buyer_agent_number) == 10:
+                    buyer_agent_number = "+91" + buyer_agent_number
+                else:
+                    raise ValueError("Invalid mobile number format")
+        else:
+            if len(buyer_agent_number) == 10:
+                buyer_agent_number = "+91" + buyer_agent_number
+            elif buyer_agent_number.startswith("91") and len(buyer_agent_number) == 12:
+                buyer_agent_number = "+" + buyer_agent_number
             else:
                 raise ValueError("Invalid mobile number format")
         
@@ -151,8 +163,11 @@ def fetch_rental_data(_db, property_id, buyer_agent_number, last_enquiry_id):
         # Query buyer agent details by phone number
         buyer_query = agents_ref.where("phonenumber", "==", buyer_agent_number).stream()
         buyer_details = next((doc.to_dict() for doc in buyer_query), None)
-        buyer_agent_name = buyer_details.get("name", "Unknown") if buyer_details else "Unknown"
-        buyer_agent_cpid = buyer_details.get("cpId", "Unknown") if buyer_details else "Unknown"
+        if not buyer_details:
+            st.error("❌ Buyer agent not found in the agent database!")
+            return None
+        buyer_agent_name = buyer_details.get("name", "Unknown")
+        buyer_agent_cpid = buyer_details.get("cpId", "Unknown")
         
         # Query seller agent details by phone number
         seller_query = agents_ref.where("phonenumber", "==", seller_agent_number).stream()
@@ -239,8 +254,6 @@ def main():
                         f"🏘 Configuration: {rental_data.get('Configuration', 'Unknown')}\n"
                         f"📍 Micromarket: {rental_data.get('Micromarket', 'Unknown')}\n"
                         f"📞 Seller Agent: {rental_data['Seller Agent Name']} ({rental_data['Seller Agent Number']})\n"
-                        # f"🆔 Seller Agent CPID: {rental_data['Seller Agent CPID']}\n"
-                        # f"🆔 Buyer Agent CPID: {rental_data['Buyer Agent CPID']}\n"
                         f"🗓 Last Checked: {rental_data['Date of Status Last Checked']}"
                     )
                     st.subheader("📋 Copy Details to Clipboard")
