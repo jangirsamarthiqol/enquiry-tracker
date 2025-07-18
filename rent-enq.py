@@ -148,7 +148,7 @@ def fetch_rental_data(_db, property_id, buyer_agent_number, last_enquiry_id):
             else:
                 raise ValueError("Invalid mobile number format")
         
-        rentals_ref = _db.collection("rental-inventories")
+        rentals_ref = _db.collection("acnRentalTemp")
         rental_query = rentals_ref.where("propertyId", "==", property_id).stream()
         rental_details = next((doc.to_dict() for doc in rental_query), None)
         if not rental_details:
@@ -159,9 +159,9 @@ def fetch_rental_data(_db, property_id, buyer_agent_number, last_enquiry_id):
         seller_agent_number = rental_details.get("agentNumber", "Unknown")
         seller_agent_name = rental_details.get("agentName", "Unknown")
         
-        agents_ref = _db.collection("agents")
+        agents_ref = _db.collection("acnAgents")
         # Query buyer agent details by phone number
-        buyer_query = agents_ref.where("phonenumber", "==", buyer_agent_number).stream()
+        buyer_query = agents_ref.where("phoneNumber", "==", buyer_agent_number).stream()
         buyer_details = next((doc.to_dict() for doc in buyer_query), None)
         if not buyer_details:
             st.error("❌ Buyer agent not found in the agent database!")
@@ -170,7 +170,7 @@ def fetch_rental_data(_db, property_id, buyer_agent_number, last_enquiry_id):
         buyer_agent_cpid = buyer_details.get("cpId", "Unknown")
         
         # Query seller agent details by phone number
-        seller_query = agents_ref.where("phonenumber", "==", seller_agent_number).stream()
+        seller_query = agents_ref.where("phoneNumber", "==", seller_agent_number).stream()
         seller_details = next((doc.to_dict() for doc in seller_query), None)
         seller_agent_cpid = seller_details.get("cpId", "Unknown") if seller_details else "Unknown"
 
