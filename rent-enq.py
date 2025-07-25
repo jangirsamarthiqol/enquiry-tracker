@@ -22,7 +22,24 @@ st.markdown(
 load_dotenv()
 
 def format_timestamp(ts):
-    return datetime.fromtimestamp(ts).strftime('%d/%b/%Y') if ts else "Unknown"
+    # ts might be a UNIX‑timestamp (int/float), a string number, 
+    # a Python datetime, or something else.
+    if not ts:
+        return "Unknown"
+    # 1) If it’s already a datetime:
+    if hasattr(ts, "strftime"):
+        return ts.strftime('%d/%b/%Y')
+    # 2) If it’s a string that represents a number:
+    try:
+        ts_val = float(ts)
+    except (TypeError, ValueError):
+        return "Unknown"
+    # 3) Now it’s a float or int:
+    try:
+        return datetime.fromtimestamp(ts_val).strftime('%d/%b/%Y')
+    except Exception:
+        return "Unknown"
+
 
 @st.cache_resource
 def init_firebase():
